@@ -25,15 +25,9 @@
 //!   }
 //! }
 //!
-//! impl Default for SwitchState {
-//!   fn default() -> Self {
-//!     SwitchState::Off
-//!   }
-//! }
+//! let mut machine = Machine::new(SwitchState::Off);
 //!
-//! let mut machine = Machine::<SwitchState, SwitchEvent>::new();
-//!
-//! // it starts at default state value
+//! // it starts at given state value
 //! assert_eq!(machine.state, SwitchState::Off);
 //!
 //! // change state by dispatching an event
@@ -47,7 +41,7 @@ use std::marker::PhantomData;
 
 pub struct Machine<S, E>
 where
-    S: State<E> + Default,
+    S: State<E>,
 {
     pub state: S,
     // FIXME: remove this phantom data when possible
@@ -56,11 +50,11 @@ where
 
 impl<S, E> Machine<S, E>
 where
-    S: State<E> + Default,
+    S: State<E>,
 {
-    pub fn new() -> Self {
+    pub fn new(initial_state: S) -> Self {
         Self {
-            state: Default::default(),
+            state: initial_state,
             _event: PhantomData,
         }
     }

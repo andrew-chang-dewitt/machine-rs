@@ -61,30 +61,27 @@
 
 use std::marker::PhantomData;
 
-pub struct Machine<S, E>
+pub struct Machine<StateType, Event>
 where
-    S: State<E>,
+    StateType: State<Event>,
 {
-    pub state: S,
+    pub state: StateType,
     // FIXME: remove this phantom data when possible
-    _event: PhantomData<E>,
+    _event: PhantomData<Event>,
 }
 
-impl<S, E> Machine<S, E>
+impl<StateType, Event> Machine<StateType, Event>
 where
-    S: State<E>,
+    StateType: State<Event>,
 {
-    pub fn new(initial_state: S) -> Self {
+    pub fn new(initial_state: StateType) -> Self {
         Self {
             state: initial_state,
             _event: PhantomData,
         }
     }
 
-    // switch to mutating the machine so we can recover from errors returned here by trying a
-    // different event before sending the erroneous event again.
-    // previously, the machine was consumed, meaning it was lost when an error was returned.
-    pub fn dispatch(&mut self, event: E) -> Result<(), String> {
+    pub fn dispatch(&mut self, event: Event) -> Result<(), String> {
         self.state = self.state.apply(event)?;
 
         // FIXME: not sure if it'd be more helpful to return a value here

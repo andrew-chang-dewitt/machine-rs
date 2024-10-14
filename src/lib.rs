@@ -5,9 +5,9 @@
 //! let's model a turnstile instead
 //!
 //! ```
-//! use machine::{Machine, State};
+//! use machine::{Machine, MachineError, State};
 //!
-//! #[derive(Debug, PartialEq)]
+//! #[derive(Clone, Copy, Debug, PartialEq)]
 //! enum TurnstileState {
 //!   Locked,
 //!   Unlocked,
@@ -20,15 +20,22 @@
 //! }
 //!
 //! impl State<TurnstileEvent> for TurnstileState {
-//!   fn apply(&self, event: TurnstileEvent) -> Result<Self, String> {
+//!   fn apply(&self, event: TurnstileEvent) -> Result<Self, MachineError<Self, TurnstileEvent>> {
 //!     match self {
 //!       Self::Locked => match event {
 //!         TurnstileEvent::PaymentReceived => Ok( Self::Unlocked ),
-//!         _ => Err("Payment required for entry.".to_owned())
+//!         // replace string error
+//!         // _ => Err("Payment required for entry.".to_owned())
+//!         // w/ actual error type
+//!         _ => Err(MachineError::InvalidEvent(*self, event))
 //!       }
+//!
 //!       Self::Unlocked => match event {
 //!         TurnstileEvent::PersonEntering => Ok( Self::Locked ),
-//!         _ => Err("Payment already received, unable to accept payment at this time.".to_owned())
+//!         // replace string error
+//!         // _ => Err("Payment already received, unable to accept payment at this time.".to_owned())
+//!         // w/ actual error type
+//!         _ => Err(MachineError::InvalidEvent(*self, event))
 //!       }
 //!     }
 //!   }
@@ -42,8 +49,12 @@
 //! // event, the machine instead returns an error
 //!
 //! // try to enter w/out paying
-//! machine.dispatch(TurnstileEvent::PersonEntering).expect_err("Shouldn't be able to enter without paying");
-//! // turnstile remains locked
+//! let locked_err = machine.dispatch(TurnstileEvent::PersonEntering).expect_err("Shouldn't be able to enter without paying");
+//! // descriptive error is returned
+//! assert_eq!(
+//!     locked_err,
+//!     MachineError::InvalidEvent(TurnstileState::Locked, TurnstileEvent::PersonEntering));
+//! // and turnstile remains locked
 //! assert_eq!(machine.state, TurnstileState::Locked);
 //! // so we pay as we're instructed to
 //! machine.dispatch(TurnstileEvent::PaymentReceived);
@@ -53,13 +64,16 @@
 //! assert_eq!(machine.state, TurnstileState::Locked); // then state returns to locked
 //!
 //! // or if we try to pay twice, we also get a helpful error
-//! machine.dispatch(TurnstileEvent::PaymentReceived);
-//! machine.dispatch(TurnstileEvent::PaymentReceived).expect_err("Shouldn't be able to enter without paying");
+//! machine.dispatch(TurnstileEvent::PaymentReceived); // pay once here, then again below
+//! let paid_err = machine.dispatch(TurnstileEvent::PaymentReceived).expect_err("Shouldn't be able to enter without paying");
+//! assert_eq!(
+//!     paid_err,
+//!     MachineError::InvalidEvent(TurnstileState::Unlocked, TurnstileEvent::PaymentReceived));
 //! // turnstile remains unlocked
 //! assert_eq!(machine.state, TurnstileState::Unlocked);
 //! ```
 
-use std::marker::PhantomData;
+use std::{error, fmt, marker::PhantomData};
 
 pub struct Machine<StateType, Event>
 where
@@ -81,17 +95,49 @@ where
         }
     }
 
-    pub fn dispatch(&mut self, event: Event) -> Result<(), String> {
-        self.state = self.state.apply(event)?;
+    pub fn dispatch(&mut self, event: Event) -> Result<(), MachineError<StateType, Event>> {
+        self.state = self.state.apply(event).map_err(|e| e.into())?;
 
         // FIXME: not sure if it'd be more helpful to return a value here
         Ok(())
     }
 }
 
-pub trait State<Event> {
-    // FIXME: can probably do better than String as the error type
-    fn apply(&self, event: Event) -> Result<Self, String>
+#[derive(Debug, PartialEq)]
+pub enum MachineError<State, Event> {
+    InvalidEvent(State, Event),
+}
+
+impl<State, Event> fmt::Display for MachineError<State, Event>
+where
+    State: fmt::Display,
+    Event: fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MachineError::InvalidEvent(ref s, ref e) => {
+                write!(f, "Invalid Event, {e} for State {s}")
+            }
+        }
+    }
+}
+
+impl<State, Event> error::Error for MachineError<State, Event>
+where
+    State: fmt::Display + fmt::Debug,
+    Event: fmt::Display + fmt::Debug,
+{
+    fn description(&self) -> &str {
+        todo!()
+    }
+
+    fn cause(&self) -> Option<&dyn error::Error> {
+        todo!()
+    }
+}
+
+pub trait State<Event, ErrorType = MachineError<Self, Event>> {
+    fn apply(&self, event: Event) -> Result<Self, ErrorType>
     where
         Self: Sized;
 }

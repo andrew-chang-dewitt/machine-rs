@@ -131,9 +131,11 @@ where
         todo!()
     }
 
-    fn cause(&self) -> Option<&dyn error::Error> {
-        todo!()
-    }
+    // FIXME: looks like we only need this if any of our MachineError variants encapsulate another
+    // Error type
+    // fn cause(&self) -> Option<&dyn error::Error> {
+    //     todo!()
+    // }
 }
 
 pub trait State<Event, ErrorType = MachineError<Self, Event>> {
